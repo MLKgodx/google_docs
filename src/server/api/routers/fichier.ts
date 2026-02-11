@@ -50,6 +50,45 @@ export const fichierRouter = createTRPCRouter({
     });
   }),
 
+  // READ - search with pagination
+  search: publicProcedure
+    .input(
+      z.object({
+        query: z.string().optional(),
+        sort: z.enum(["newest", "oldest"]).optional().default("newest"),
+        page: z.number().min(1).optional().default(1),
+        perPage: z.number().min(1).max(50).optional().default(12),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const { query, sort, page, perPage } = input;
+      const where = {
+        userId: TEMP_USER_ID,
+        active: true,
+        ...(query
+          ? { name: { contains: query, mode: "insensitive" as const } }
+          : {}),
+      };
+
+      const [items, total] = await Promise.all([
+        ctx.db.fichier.findMany({
+          where,
+          orderBy: { updatedAt: sort === "newest" ? "desc" : "asc" },
+          skip: (page - 1) * perPage,
+          take: perPage,
+        }),
+        ctx.db.fichier.count({ where }),
+      ]);
+
+      return {
+        items,
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(total / perPage),
+      };
+    }),
+
   // READ - get all favorites
   getFavoris: publicProcedure.query(async ({ ctx }) => {
     return ctx.db.fichier.findMany({
