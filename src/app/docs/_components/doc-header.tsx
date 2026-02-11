@@ -7,20 +7,20 @@ import toast from "react-hot-toast"
 interface DocHeaderProps {
   name: string
   onNameChange: (name: string) => void
-  onSave?: () => void
+  onSave?: () => Promise<void> | void
 }
 
 export function DocHeader({ name, onNameChange, onSave }: DocHeaderProps) {
   const router = useRouter()
 
-  const handleGoBack = () => {
-    onSave?.()
+  const handleGoBack = async () => {
+    await onSave?.()
     router.push("/docs")
     router.refresh()
   }
 
-  const handleSave = () => {
-    onSave?.()
+  const handleSave = async () => {
+    await onSave?.()
     toast.success("Document sauvegardé")
     router.push("/docs")
     router.refresh()

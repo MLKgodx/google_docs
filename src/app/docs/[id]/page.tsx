@@ -26,6 +26,7 @@ import TaskItem from "@tiptap/extension-task-item"
 import Typography from "@tiptap/extension-typography"
 import { Toolbar } from "../_components/toolbar"
 import { DocHeader } from "../_components/doc-header"
+import { FontSize } from "../_components/font-size"
 import { api } from "~/trpc/react"
 
 const LOCAL_SAVE_DELAY = 500
@@ -41,30 +42,41 @@ export default function EditorPage() {
   const localSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dbIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const hasLoadedContent = useRef(false)
+  const docNameRef = useRef(docName)
+
+  // Keep ref in sync so callbacks always use latest name
+  useEffect(() => {
+    docNameRef.current = docName
+  }, [docName])
 
   const { data: fichier } = api.fichier.getById.useQuery(
     { id },
     { enabled: !!id },
   )
 
+  const utils = api.useUtils()
   const saveMutation = api.fichier.save.useMutation()
 
   const saveToDb = useCallback(
     (html: string) => {
-      saveMutation.mutate({
+      return saveMutation.mutateAsync({
         id,
-        name: docName,
+        name: docNameRef.current,
         content: html,
       })
     },
-    [id, saveMutation, docName],
+    [id, saveMutation],
   )
 
   const saveToLocal = useCallback(
     (html: string) => {
-      localStorage.setItem(getLocalStorageKey(id), JSON.stringify({ content: html, name: docName }))
+      localStorage.setItem(getLocalStorageKey(id), JSON.stringify({
+        content: html,
+        name: docNameRef.current,
+        savedAt: Date.now(),
+      }))
     },
-    [id, docName],
+    [id],
   )
 
   const editor = useEditor({
@@ -73,6 +85,7 @@ export default function EditorPage() {
       Underline,
       TextStyle,
       FontFamily,
+      FontSize,
       Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({
@@ -106,33 +119,49 @@ export default function EditorPage() {
     immediatelyRender: false,
   })
 
-  // Load content: localStorage first (instant), then DB
+  // Load content: compare localStorage and DB timestamps, use the most recent
   useEffect(() => {
     if (!editor || hasLoadedContent.current) return
 
-    // Try localStorage first
+    let localContent: string | null = null
+    let localName: string | null = null
+    let localSavedAt = 0
+
     const localData = localStorage.getItem(getLocalStorageKey(id))
     if (localData) {
       try {
-        const parsed = JSON.parse(localData) as { content: string; name: string }
+        const parsed = JSON.parse(localData) as { content: string; name: string; savedAt?: number }
         if (parsed.content) {
-          editor.commands.setContent(parsed.content)
-          setDocName(parsed.name)
+          localContent = parsed.content
+          localName = parsed.name
+          localSavedAt = parsed.savedAt ?? 0
         }
       } catch { /* ignore */ }
     }
 
-    // Then override with DB data if available
     if (fichier) {
       hasLoadedContent.current = true
-      setDocName(fichier.name)
-      if (fichier.content) {
-        editor.commands.setContent(fichier.content)
+      const dbSavedAt = new Date(fichier.updatedAt).getTime()
+
+      if (localContent && localSavedAt > dbSavedAt) {
+        // localStorage is more recent
+        editor.commands.setContent(localContent)
+        setDocName(localName ?? fichier.name)
+      } else {
+        // DB is more recent (or no local data)
+        setDocName(fichier.name)
+        if (fichier.content) {
+          editor.commands.setContent(fichier.content)
+        }
       }
+    } else if (localContent) {
+      // DB not loaded yet, show local data in the meantime
+      editor.commands.setContent(localContent)
+      if (localName) setDocName(localName)
     }
   }, [fichier, editor, id])
 
-  // Save to localStorage on every change (500ms debounce)
+  // Debounced save to localStorage on editor changes
   useEffect(() => {
     if (!editor) return
 
@@ -150,7 +179,16 @@ export default function EditorPage() {
     }
   }, [editor, saveToLocal])
 
-  // Save to DB every 5 minutes
+  // Also save to localStorage when the name changes
+  useEffect(() => {
+    if (!editor || !hasLoadedContent.current) return
+    if (localSaveRef.current) clearTimeout(localSaveRef.current)
+    localSaveRef.current = setTimeout(() => {
+      saveToLocal(editor.getHTML())
+    }, LOCAL_SAVE_DELAY)
+  }, [docName, editor, saveToLocal])
+
+  // Save to DB every 5 minutes (stable interval, reads latest values via refs)
   useEffect(() => {
     if (!editor) return
 
@@ -169,11 +207,12 @@ export default function EditorPage() {
         <DocHeader
           name={docName}
           onNameChange={setDocName}
-          onSave={() => {
+          onSave={async () => {
             if (editor) {
               const html = editor.getHTML()
               saveToLocal(html)
-              saveToDb(html)
+              await saveToDb(html)
+              await utils.fichier.search.invalidate()
             }
           }}
         />
@@ -182,7 +221,11 @@ export default function EditorPage() {
       <div className="flex flex-1 justify-center py-8">
         <div
           className="tiptap-editor a4-page cursor-text"
-          onClick={() => editor?.chain().focus("end").run()}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              editor?.chain().focus("end").run()
+            }
+          }}
         >
           <EditorContent editor={editor} />
         </div>

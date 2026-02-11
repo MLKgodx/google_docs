@@ -40,7 +40,8 @@ import {
   Trash2,
   Plus,
 } from "lucide-react"
-import { useCallback, useRef, useState } from "react"
+import { type DragEvent, useCallback, useEffect, useRef, useState } from "react"
+import { Upload } from "lucide-react"
 
 interface ToolbarProps {
   editor: Editor | null
@@ -90,6 +91,7 @@ function ToolbarButton({
   return (
     <button
       type="button"
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -197,10 +199,108 @@ function ColorPicker({
   )
 }
 
+function ImageDropdown({
+  onUrl,
+  onFile,
+}: {
+  onUrl: () => void
+  onFile: (file: File) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file?.type.startsWith("image/")) {
+      onFile(file)
+      setOpen(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      onFile(file)
+      setOpen(false)
+    }
+    e.target.value = ""
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        title="Insert image"
+        className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+      >
+        <Image size={16} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+          {/* Drag & drop zone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`mb-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-4 transition-colors ${
+              dragging
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+            }`}
+          >
+            <Upload size={24} className={dragging ? "text-blue-500" : "text-gray-400"} />
+            <p className="mt-1 text-center text-xs text-gray-500">
+              Glisser une image ici ou <span className="text-blue-600">parcourir</span>
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </div>
+          {/* URL button */}
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              onUrl()
+              setOpen(false)
+            }}
+            className="w-full rounded px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Insérer via URL
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Toolbar({ editor }: ToolbarProps) {
-  if (!editor) return null
+  const [, forceUpdate] = useState(0)
+
+  useEffect(() => {
+    if (!editor) return
+    const handler = () => forceUpdate((n) => n + 1)
+    editor.on("transaction", handler)
+    return () => {
+      editor.off("transaction", handler)
+    }
+  }, [editor])
 
   const setLink = useCallback(() => {
+    if (!editor) return
     const previousUrl = editor.getAttributes("link").href as string | undefined
     const url = window.prompt("URL", previousUrl)
     if (url === null) return
@@ -211,16 +311,34 @@ export function Toolbar({ editor }: ToolbarProps) {
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
   }, [editor])
 
-  const addImage = useCallback(() => {
+  const addImageFromUrl = useCallback(() => {
+    if (!editor) return
     const url = window.prompt("Image URL")
     if (url) {
       editor.chain().focus().setImage({ src: url }).run()
     }
   }, [editor])
 
+  const addImageFromFile = useCallback(
+    (file: File) => {
+      if (!editor) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          editor.chain().focus().setImage({ src: reader.result }).run()
+        }
+      }
+      reader.readAsDataURL(file)
+    },
+    [editor],
+  )
+
   const insertTable = useCallback(() => {
+    if (!editor) return
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
   }, [editor])
+
+  if (!editor) return null
 
   const currentHeading = editor.isActive("heading", { level: 1 })
     ? "Heading 1"
@@ -235,6 +353,9 @@ export function Toolbar({ editor }: ToolbarProps) {
 
   const currentFontLabel =
     FONT_FAMILIES.find((f) => f.value === currentFontFamily)?.label ?? "Sans Serif"
+
+  const currentFontSize =
+    (editor.getAttributes("textStyle").fontSize as string)?.replace("px", "") ?? "16"
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b border-gray-200 bg-gray-50 px-2 py-1.5">
@@ -310,7 +431,7 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Divider />
 
       {/* Font Size */}
-      <Dropdown label={<span className="min-w-[24px] text-center text-xs">16</span>} width="w-20">
+      <Dropdown label={<span className="min-w-[24px] text-center text-xs">{currentFontSize}</span>} width="w-20">
         {FONT_SIZES.map((size) => (
           <button
             key={size}
@@ -400,9 +521,10 @@ export function Toolbar({ editor }: ToolbarProps) {
       )}
 
       {/* Image */}
-      <ToolbarButton onClick={addImage} title="Insert image">
-        <Image size={16} />
-      </ToolbarButton>
+      <ImageDropdown
+        onUrl={addImageFromUrl}
+        onFile={addImageFromFile}
+      />
 
       <Divider />
 
