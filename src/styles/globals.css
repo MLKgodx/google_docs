@@ -4,3 +4,185 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
+
+/* Tiptap editor styles */
+/* A4 page */
+.a4-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 25mm 30mm;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.tiptap-editor .tiptap {
+  outline: none;
+  min-height: 100%;
+}
+
+.tiptap-editor .tiptap p {
+  margin: 0.75em 0;
+}
+
+.tiptap-editor .tiptap h1 {
+  font-size: 2em;
+  font-weight: 700;
+  margin: 0.67em 0;
+}
+
+.tiptap-editor .tiptap h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 0.75em 0;
+}
+
+.tiptap-editor .tiptap h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin: 0.83em 0;
+}
+
+.tiptap-editor .tiptap ul,
+.tiptap-editor .tiptap ol {
+  padding-left: 1.5em;
+  margin: 0.75em 0;
+}
+
+.tiptap-editor .tiptap ul {
+  list-style-type: disc;
+}
+
+.tiptap-editor .tiptap ol {
+  list-style-type: decimal;
+}
+
+.tiptap-editor .tiptap blockquote {
+  border-left: 3px solid #d1d5db;
+  padding-left: 1em;
+  margin: 0.75em 0;
+  color: #6b7280;
+}
+
+.tiptap-editor .tiptap code {
+  background-color: #f3f4f6;
+  border-radius: 0.25em;
+  padding: 0.15em 0.3em;
+  font-size: 0.9em;
+}
+
+.tiptap-editor .tiptap pre {
+  background-color: #1f2937;
+  color: #f9fafb;
+  border-radius: 0.5em;
+  padding: 1em;
+  margin: 0.75em 0;
+  overflow-x: auto;
+}
+
+.tiptap-editor .tiptap pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+.tiptap-editor .tiptap hr {
+  border: none;
+  border-top: 1px solid #d1d5db;
+  margin: 1.5em 0;
+}
+
+/* Placeholder */
+.tiptap-editor .tiptap p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Task List */
+.tiptap-editor .tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] li label {
+  margin-top: 0.2em;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] li[data-checked="true"] > div > p {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
+/* Table */
+.tiptap-editor .tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  overflow: hidden;
+}
+
+.tiptap-editor .tiptap table td,
+.tiptap-editor .tiptap table th {
+  border: 1px solid #d1d5db;
+  padding: 0.5em 0.75em;
+  vertical-align: top;
+  position: relative;
+  min-width: 80px;
+}
+
+.tiptap-editor .tiptap table th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+
+.tiptap-editor .tiptap table .selectedCell {
+  background-color: #dbeafe;
+}
+
+.tiptap-editor .tiptap table .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #3b82f6;
+  pointer-events: none;
+}
+
+/* Image */
+.tiptap-editor .tiptap img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375em;
+  margin: 0.75em 0;
+}
+
+.tiptap-editor .tiptap img.ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  border-radius: 0.375em;
+}
+
+/* Subscript / Superscript */
+.tiptap-editor .tiptap sub {
+  vertical-align: sub;
+  font-size: 0.75em;
+}
+
+.tiptap-editor .tiptap sup {
+  vertical-align: super;
+  font-size: 0.75em;
+}
+
+/* Highlight */
+.tiptap-editor .tiptap mark {
+  border-radius: 0.15em;
+  padding: 0.05em 0.1em;
+}
