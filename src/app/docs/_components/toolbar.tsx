@@ -205,6 +205,18 @@ function ImageDropdown({
   const [open, setOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [open])
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -226,11 +238,17 @@ function ImageDropdown({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        onBlur={() => setTimeout(() => setOpen(false), 200)}
         title="Insert image"
         className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-gray-100 hover:text-gray-900"
       >
@@ -257,13 +275,6 @@ function ImageDropdown({
             <p className="mt-1 text-center text-xs text-gray-500">
               Glisser une image ici ou <span className="text-blue-600">parcourir</span>
             </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="hidden"
-            />
           </div>
           {/* URL button */}
           <button
@@ -316,15 +327,14 @@ export function Toolbar({ editor }: ToolbarProps) {
   }, [editor])
 
   const addImageFromFile = useCallback(
-    async (file: File) => {
+    (file: File) => {
       if (!editor) return
-      const formData = new FormData()
-      formData.append("file", file)
-      const res = await fetch("/api/upload", { method: "POST", body: formData })
-      const data = (await res.json()) as { url?: string }
-      if (data.url) {
-        editor.chain().focus().setImage({ src: data.url }).run()
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        editor.chain().focus().setImage({ src: dataUrl }).run()
       }
+      reader.readAsDataURL(file)
     },
     [editor],
   )

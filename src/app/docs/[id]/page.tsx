@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { type DragEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
@@ -108,6 +108,7 @@ export default function EditorPage() {
       }),
       Image.configure({
         inline: false,
+        allowBase64: true,
       }),
       Table.configure({
         resizable: true,
@@ -199,6 +200,21 @@ export default function EditorPage() {
     }, LOCAL_SAVE_DELAY)
   }, [docName, editor, saveToLocal, getContent])
 
+  const handleEditorDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      const file = e.dataTransfer?.files[0]
+      if (!file?.type.startsWith("image/") || !editor) return
+      e.preventDefault()
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        editor.chain().focus().setImage({ src: dataUrl }).run()
+      }
+      reader.readAsDataURL(file)
+    },
+    [editor],
+  )
+
   // Save to DB every 5 minutes (stable interval, reads latest values via refs)
   useEffect(() => {
     if (!editor) return
@@ -241,7 +257,11 @@ export default function EditorPage() {
         />
         <Toolbar editor={editor} />
       </div>
-      <div className="flex flex-1 justify-center py-8">
+      <div
+        className="flex flex-1 justify-center py-8"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleEditorDrop}
+      >
         <div
           className="tiptap-editor a4-page cursor-text"
           onClick={(e) => {

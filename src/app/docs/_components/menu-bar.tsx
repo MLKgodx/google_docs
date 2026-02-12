@@ -186,13 +186,14 @@ function ImageUploadPanel({
   onFile,
   onUrl,
   onClose,
+  fileInputRef,
 }: {
   onFile: (file: File) => void
   onUrl: () => void
   onClose: () => void
+  fileInputRef: React.RefObject<HTMLInputElement | null>
 }) {
   const [dragging, setDragging] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -202,15 +203,6 @@ function ImageUploadPanel({
       onFile(file)
       onClose()
     }
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      onFile(file)
-      onClose()
-    }
-    e.target.value = ""
   }
 
   return (
@@ -233,13 +225,6 @@ function ImageUploadPanel({
         <p className="mt-1 text-center text-xs text-gray-500">
           Glisser une image ici ou <span className="text-blue-600">parcourir</span>
         </p>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          className="hidden"
-        />
       </div>
       <button
         type="button"
@@ -259,6 +244,7 @@ function ImageUploadPanel({
 export function MenuBar({ editor, onSave, docName }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const router = useRouter()
+  const menuImageInputRef = useRef<HTMLInputElement>(null)
 
   const close = () => setOpenMenu(null)
 
@@ -382,15 +368,14 @@ export function MenuBar({ editor, onSave, docName }: MenuBarProps) {
     },
   ]
 
-  const handleImageFile = async (file: File) => {
+  const handleImageFile = (file: File) => {
     if (!editor) return
-    const formData = new FormData()
-    formData.append("file", file)
-    const res = await fetch("/api/upload", { method: "POST", body: formData })
-    const data = (await res.json()) as { url?: string }
-    if (data.url) {
-      editor.chain().focus().setImage({ src: data.url }).run()
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      editor.chain().focus().setImage({ src: dataUrl }).run()
     }
+    reader.readAsDataURL(file)
   }
 
   const handleImageUrl = () => {
@@ -403,9 +388,10 @@ export function MenuBar({ editor, onSave, docName }: MenuBarProps) {
       label: "Image",
       customPanel: (
         <ImageUploadPanel
-          onFile={(file) => void handleImageFile(file)}
+          onFile={handleImageFile}
           onUrl={handleImageUrl}
           onClose={close}
+          fileInputRef={menuImageInputRef}
         />
       ),
     },
@@ -498,17 +484,30 @@ export function MenuBar({ editor, onSave, docName }: MenuBarProps) {
   ]
 
   return (
-    <div className="flex items-center gap-0.5 px-2 py-0.5">
-      {menus.map((menu) => (
-        <MenuDropdown
-          key={menu.key}
-          label={menu.label}
-          items={menu.items}
-          isOpen={openMenu === menu.key}
-          onOpen={() => setOpenMenu(menu.key)}
-          onClose={close}
-        />
-      ))}
-    </div>
+    <>
+      <input
+        ref={menuImageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) handleImageFile(file)
+          e.target.value = ""
+        }}
+        className="hidden"
+      />
+      <div className="flex items-center gap-0.5 px-2 py-0.5">
+        {menus.map((menu) => (
+          <MenuDropdown
+            key={menu.key}
+            label={menu.label}
+            items={menu.items}
+            isOpen={openMenu === menu.key}
+            onOpen={() => setOpenMenu(menu.key)}
+            onClose={close}
+          />
+        ))}
+      </div>
+    </>
   )
 }
