@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowDownAZ,
@@ -29,6 +29,10 @@ const PER_PAGE = 12
 export default function DocsPage() {
   const router = useRouter()
 
+  useEffect(() => {
+    document.title = "Google Docs Clone"
+  }, [])
+
   const [search, setSearch] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest")
@@ -36,7 +40,7 @@ export default function DocsPage() {
 
   const { data, isLoading } = api.fichier.search.useQuery(
     { query: search || undefined, sort: sortOrder, page, perPage: PER_PAGE },
-    { keepPreviousData: true },
+    { placeholderData: (prev) => prev },
   )
 
   const utils = api.useUtils()
@@ -88,19 +92,19 @@ export default function DocsPage() {
       <div className="border-b border-gray-200 bg-white px-8 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <FileText size={28} className="text-blue-600" />
+            <button
+              onClick={() => router.push("/docs")}
+              className="group relative rounded-full p-1.5 hover:bg-gray-200 active:scale-90 active:bg-gray-300 transition-transform"
+            >
+              <FileText size={28} className="text-blue-600" />
+              <span className="pointer-events-none absolute left-0 top-full mt-1 hidden whitespace-nowrap rounded bg-black/100 px-2 py-1 text-xs font-bold text-white group-hover:block">
+                Docs Clone
+              </span>
+            </button>
             <h1 className="text-xl font-semibold text-gray-800">
               Mes documents
             </h1>
           </div>
-          <button
-            onClick={handleCreate}
-            disabled={createMutation.isPending}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-          >
-            <Plus size={18} />
-            {createMutation.isPending ? "Création..." : "Nouveau document"}
-          </button>
         </div>
       </div>
 
@@ -117,7 +121,7 @@ export default function DocsPage() {
               type="text"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Rechercher un document..."
+              placeholder="Rechercher un document"
               className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
           </div>
@@ -184,6 +188,22 @@ export default function DocsPage() {
           </p>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            <h1>Créer un document</h1>
+            <button
+              onClick={handleCreate}
+              disabled={createMutation.isPending}
+              className="flex flex-col items-center justify-center rounded-lg border-2 border-solid border-gray-300 bg-white p-4 transition-colors hover:border-blue-400 disabled:opacity-50"
+            >
+              
+              <div className="mb-3 flex h-32 items-center justify-center">
+                
+                <Plus size={48} className="text-gray-400" />
+              </div>
+              <span className="text-sm font-medium text-gray-500">
+                {createMutation.isPending ? "Création..." : "Nouveau document"}
+              </span>
+            </button>
+            <h1>Mes documents</h1>
             {fichiers.map((fichier) => (
               <div
                 key={fichier.id}
@@ -221,12 +241,20 @@ export default function DocsPage() {
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-            {fichiers.map((fichier, i) => (
+            <button
+              onClick={handleCreate}
+              disabled={createMutation.isPending}
+              className="flex w-full items-center gap-4 px-4 py-3 transition-colors hover:bg-blue-50 disabled:opacity-50"
+            >
+              <Plus size={24} className="flex-shrink-0 text-gray-400" />
+              <span className="flex-1 text-left text-sm font-medium text-gray-500">
+                {createMutation.isPending ? "Création..." : "Nouveau document"}
+              </span>
+            </button>
+            {fichiers.map((fichier) => (
               <div
                 key={fichier.id}
-                className={`group flex items-center gap-4 px-4 py-3 transition-colors hover:bg-gray-50 ${
-                  i > 0 ? "border-t border-gray-100" : ""
-                }`}
+                className="group flex items-center gap-4 border-t border-gray-100 px-4 py-3 transition-colors hover:bg-gray-50"
               >
                 <button
                   onClick={() => router.push(`/docs/${fichier.id}`)}

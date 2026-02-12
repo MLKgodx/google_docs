@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -25,6 +24,7 @@ import TaskList from "@tiptap/extension-task-list"
 import TaskItem from "@tiptap/extension-task-item"
 import Typography from "@tiptap/extension-typography"
 import { Toolbar } from "../_components/toolbar"
+import { MenuBar } from "../_components/menu-bar"
 import { DocHeader } from "../_components/doc-header"
 import { FontSize } from "../_components/font-size"
 import { api } from "~/trpc/react"
@@ -36,6 +36,14 @@ function getLocalStorageKey(id: string) {
   return `doc-${id}`
 }
 
+function parseContent(raw: string): string | Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (parsed.type === "doc") return parsed
+  } catch { /* not JSON, treat as HTML */ }
+  return raw
+}
+
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
   const [docName, setDocName] = useState("Sans titre")
@@ -44,9 +52,10 @@ export default function EditorPage() {
   const hasLoadedContent = useRef(false)
   const docNameRef = useRef(docName)
 
-  // Keep ref in sync so callbacks always use latest name
+  // Keep ref in sync and update browser tab title
   useEffect(() => {
     docNameRef.current = docName
+    document.title = docName || "Sans titre"
   }, [docName])
 
   const { data: fichier } = api.fichier.getById.useQuery(
@@ -58,20 +67,20 @@ export default function EditorPage() {
   const saveMutation = api.fichier.save.useMutation()
 
   const saveToDb = useCallback(
-    (html: string) => {
+    (content: string) => {
       return saveMutation.mutateAsync({
         id,
         name: docNameRef.current,
-        content: html,
+        content,
       })
     },
     [id, saveMutation],
   )
 
   const saveToLocal = useCallback(
-    (html: string) => {
+    (content: string) => {
       localStorage.setItem(getLocalStorageKey(id), JSON.stringify({
-        content: html,
+        content,
         name: docNameRef.current,
         savedAt: Date.now(),
       }))
@@ -101,7 +110,6 @@ export default function EditorPage() {
       }),
       Image.configure({
         inline: false,
-        allowBase64: true,
       }),
       Table.configure({
         resizable: true,
@@ -118,6 +126,11 @@ export default function EditorPage() {
     content: "",
     immediatelyRender: false,
   })
+
+  const getContent = useCallback(() => {
+    if (!editor) return ""
+    return JSON.stringify(editor.getJSON())
+  }, [editor])
 
   // Load content: compare localStorage and DB timestamps, use the most recent
   useEffect(() => {
@@ -145,18 +158,18 @@ export default function EditorPage() {
 
       if (localContent && localSavedAt > dbSavedAt) {
         // localStorage is more recent
-        editor.commands.setContent(localContent)
+        editor.commands.setContent(parseContent(localContent))
         setDocName(localName ?? fichier.name)
       } else {
         // DB is more recent (or no local data)
         setDocName(fichier.name)
         if (fichier.content) {
-          editor.commands.setContent(fichier.content)
+          editor.commands.setContent(parseContent(fichier.content))
         }
       }
     } else if (localContent) {
       // DB not loaded yet, show local data in the meantime
-      editor.commands.setContent(localContent)
+      editor.commands.setContent(parseContent(localContent))
       if (localName) setDocName(localName)
     }
   }, [fichier, editor, id])
@@ -168,7 +181,7 @@ export default function EditorPage() {
     const onUpdate = () => {
       if (localSaveRef.current) clearTimeout(localSaveRef.current)
       localSaveRef.current = setTimeout(() => {
-        saveToLocal(editor.getHTML())
+        saveToLocal(getContent())
       }, LOCAL_SAVE_DELAY)
     }
 
@@ -177,29 +190,29 @@ export default function EditorPage() {
       editor.off("update", onUpdate)
       if (localSaveRef.current) clearTimeout(localSaveRef.current)
     }
-  }, [editor, saveToLocal])
+  }, [editor, saveToLocal, getContent])
 
   // Also save to localStorage when the name changes
   useEffect(() => {
     if (!editor || !hasLoadedContent.current) return
     if (localSaveRef.current) clearTimeout(localSaveRef.current)
     localSaveRef.current = setTimeout(() => {
-      saveToLocal(editor.getHTML())
+      saveToLocal(getContent())
     }, LOCAL_SAVE_DELAY)
-  }, [docName, editor, saveToLocal])
+  }, [docName, editor, saveToLocal, getContent])
 
   // Save to DB every 5 minutes (stable interval, reads latest values via refs)
   useEffect(() => {
     if (!editor) return
 
     dbIntervalRef.current = setInterval(() => {
-      saveToDb(editor.getHTML())
+      void saveToDb(getContent())
     }, DB_SAVE_INTERVAL)
 
     return () => {
       if (dbIntervalRef.current) clearInterval(dbIntervalRef.current)
     }
-  }, [editor, saveToDb])
+  }, [editor, saveToDb, getContent])
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-100">
@@ -209,9 +222,21 @@ export default function EditorPage() {
           onNameChange={setDocName}
           onSave={async () => {
             if (editor) {
-              const html = editor.getHTML()
-              saveToLocal(html)
-              await saveToDb(html)
+              const content = getContent()
+              saveToLocal(content)
+              await saveToDb(content)
+              await utils.fichier.search.invalidate()
+            }
+          }}
+        />
+        <MenuBar
+          editor={editor}
+          docName={docName}
+          onSave={async () => {
+            if (editor) {
+              const content = getContent()
+              saveToLocal(content)
+              await saveToDb(content)
               await utils.fichier.search.invalidate()
             }
           }}

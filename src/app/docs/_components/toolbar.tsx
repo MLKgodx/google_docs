@@ -7,9 +7,6 @@ import {
   Underline,
   Strikethrough,
   Code,
-  Heading1,
-  Heading2,
-  Heading3,
   List,
   ListOrdered,
   ListChecks,
@@ -32,7 +29,6 @@ import {
   Outdent,
   CodeSquare,
   Paintbrush,
-  Type,
   Palette,
   ChevronDown,
   TableCellsMerge,
@@ -41,6 +37,7 @@ import {
   Plus,
 } from "lucide-react"
 import { type DragEvent, useCallback, useEffect, useRef, useState } from "react"
+import { useUploadThing } from "~/utils/uploadthing"
 import { Upload } from "lucide-react"
 
 interface ToolbarProps {
@@ -204,7 +201,7 @@ function ImageDropdown({
   onFile,
 }: {
   onUrl: () => void
-  onFile: (file: File) => void
+  onFile: (file: File) => Promise<void> | void
 }) {
   const [open, setOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -215,7 +212,7 @@ function ImageDropdown({
     setDragging(false)
     const file = e.dataTransfer.files[0]
     if (file?.type.startsWith("image/")) {
-      onFile(file)
+      void onFile(file)
       setOpen(false)
     }
   }
@@ -223,7 +220,7 @@ function ImageDropdown({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      onFile(file)
+      void onFile(file)
       setOpen(false)
     }
     e.target.value = ""
@@ -289,6 +286,7 @@ function ImageDropdown({
 
 export function Toolbar({ editor }: ToolbarProps) {
   const [, forceUpdate] = useState(0)
+  const { startUpload } = useUploadThing("imageUploader")
 
   useEffect(() => {
     if (!editor) return
@@ -320,17 +318,15 @@ export function Toolbar({ editor }: ToolbarProps) {
   }, [editor])
 
   const addImageFromFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       if (!editor) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          editor.chain().focus().setImage({ src: reader.result }).run()
-        }
+      const res = await startUpload([file])
+      const url = res?.[0]?.ufsUrl
+      if (url) {
+        editor.chain().focus().setImage({ src: url }).run()
       }
-      reader.readAsDataURL(file)
     },
-    [editor],
+    [editor, startUpload],
   )
 
   const insertTable = useCallback(() => {
