@@ -5,7 +5,6 @@ import { ChevronRight } from "lucide-react"
 import { type DragEvent, useRef, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Upload } from "lucide-react"
-import { useUploadThing } from "~/utils/uploadthing"
 
 interface MenuBarProps {
   editor: Editor | null
@@ -260,7 +259,6 @@ function ImageUploadPanel({
 export function MenuBar({ editor, onSave, docName }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const router = useRouter()
-  const { startUpload } = useUploadThing("imageUploader")
 
   const close = () => setOpenMenu(null)
 
@@ -386,10 +384,12 @@ export function MenuBar({ editor, onSave, docName }: MenuBarProps) {
 
   const handleImageFile = async (file: File) => {
     if (!editor) return
-    const res = await startUpload([file])
-    const url = res?.[0]?.ufsUrl
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run()
+    const formData = new FormData()
+    formData.append("file", file)
+    const res = await fetch("/api/upload", { method: "POST", body: formData })
+    const data = (await res.json()) as { url?: string }
+    if (data.url) {
+      editor.chain().focus().setImage({ src: data.url }).run()
     }
   }
 

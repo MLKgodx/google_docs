@@ -1,10 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowDownAZ,
@@ -16,6 +12,8 @@ import {
   List,
   Plus,
   Search,
+  MoreVertical,
+  Pencil,
   Trash2,
 } from "lucide-react"
 import toast from "react-hot-toast"
@@ -61,6 +59,40 @@ export default function DocsPage() {
     },
   })
 
+  const renameMutation = api.fichier.rename.useMutation({
+    onSuccess: () => {
+      void utils.fichier.search.invalidate()
+      toast.success("Document renommé")
+    },
+    onError: () => {
+      toast.error("Erreur lors du renommage")
+    },
+  })
+
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleRenameSubmit = (id: string) => {
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      renameMutation.mutate({ id, name: trimmed })
+    }
+    setRenamingId(null)
+  }
+
   const handleCreate = () => {
     createMutation.mutate({ name: "Sans titre", type: "Document" })
   }
@@ -75,6 +107,29 @@ export default function DocsPage() {
     setPage(1)
   }
 
+  const extractPreviewText = (content: string | null): string => {
+    if (!content) return ""
+    // Try JSON (TipTap JSON format)
+    try {
+      const doc = JSON.parse(content) as { type?: string; content?: Array<{ content?: Array<{ text?: string }> }> }
+      if (doc.type === "doc" && doc.content) {
+        const texts: string[] = []
+        for (const node of doc.content) {
+          if (node.content) {
+            for (const inline of node.content) {
+              if (inline.text) texts.push(inline.text)
+            }
+          }
+          if (texts.join(" ").length > 200) break
+        }
+        return texts.join(" ")
+      }
+    } catch { /* not JSON, try HTML */ }
+    // HTML content: strip tags
+    const text = content.replace(/<[^>]*>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim()
+    return text.substring(0, 300)
+  }
+
   const formatDate = (date: Date) =>
     new Date(date).toLocaleDateString("fr-FR", {
       day: "numeric",
@@ -87,10 +142,10 @@ export default function DocsPage() {
   const total = data?.total ?? 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-8 py-4">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
+        <div className="mx-auto flex max-w-5xl items-center gap-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push("/docs")}
@@ -102,70 +157,21 @@ export default function DocsPage() {
               </span>
             </button>
             <h1 className="text-xl font-semibold text-gray-800">
-              Mes documents
+              Docs
             </h1>
           </div>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="mx-auto max-w-5xl px-8 pt-6">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
           <div className="relative flex-1">
             <Search
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={20}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <input
               type="text"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Rechercher un document"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 text-sm text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="w-full rounded-lg border border-gray-200 bg-gray-100 py-3 pl-12 pr-4 text-base text-gray-800 outline-none transition-colors placeholder:text-gray-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
-          </div>
-
-          {/* Sort */}
-          <button
-            onClick={toggleSortOrder}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-            title={sortOrder === "newest" ? "Plus récents" : "Plus anciens"}
-          >
-            {sortOrder === "newest" ? (
-              <ArrowDownAZ size={18} />
-            ) : (
-              <ArrowUpAZ size={18} />
-            )}
-            <span className="hidden sm:inline">
-              {sortOrder === "newest" ? "Plus récents" : "Plus anciens"}
-            </span>
-          </button>
-
-          {/* View toggle */}
-          <div className="flex overflow-hidden rounded-lg border border-gray-200">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`p-2 transition-colors ${
-                viewMode === "grid"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-              title="Grille"
-            >
-              <Grid3X3 size={18} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-2 transition-colors ${
-                viewMode === "list"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-600 hover:bg-gray-50"
-              }`}
-              title="Liste"
-            >
-              <List size={18} />
-            </button>
           </div>
         </div>
       </div>
@@ -186,100 +192,250 @@ export default function DocsPage() {
           <p className="py-12 text-center text-gray-500">
             Aucun document trouvé pour &quot;{search}&quot;
           </p>
-        ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            <h1>Créer un document</h1>
-            <button
-              onClick={handleCreate}
-              disabled={createMutation.isPending}
-              className="flex flex-col items-center justify-center rounded-lg border-2 border-solid border-gray-300 bg-white p-4 transition-colors hover:border-blue-400 disabled:opacity-50"
-            >
-              
-              <div className="mb-3 flex h-32 items-center justify-center">
-                
-                <Plus size={48} className="text-gray-400" />
-              </div>
-              <span className="text-sm font-medium text-gray-500">
-                {createMutation.isPending ? "Création..." : "Nouveau document"}
-              </span>
-            </button>
-            <h1>Mes documents</h1>
-            {fichiers.map((fichier) => (
-              <div
-                key={fichier.id}
-                className="group relative flex flex-col rounded-lg border border-gray-200 bg-white p-4 text-left transition-shadow hover:shadow-md"
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteMutation.mutate({ id: fichier.id })
-                  }}
-                  className="absolute right-2 top-2 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                  title="Supprimer"
-                >
-                  <Trash2 size={16} />
-                </button>
-                <button
-                  onClick={() => router.push(`/docs/${fichier.id}`)}
-                  className="flex flex-1 flex-col"
-                >
-                  <div className="mb-3 flex h-32 items-center justify-center rounded bg-gray-50">
-                    <FileText
-                      size={48}
-                      className="text-blue-400 group-hover:text-blue-500"
-                    />
-                  </div>
-                  <h3 className="truncate text-sm font-medium text-gray-800">
-                    {fichier.name}
-                  </h3>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {formatDate(fichier.updatedAt)}
-                  </p>
-                </button>
-              </div>
-            ))}
-          </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <button
-              onClick={handleCreate}
-              disabled={createMutation.isPending}
-              className="flex w-full items-center gap-4 px-4 py-3 transition-colors hover:bg-blue-50 disabled:opacity-50"
-            >
-              <Plus size={24} className="flex-shrink-0 text-gray-400" />
-              <span className="flex-1 text-left text-sm font-medium text-gray-500">
-                {createMutation.isPending ? "Création..." : "Nouveau document"}
-              </span>
-            </button>
-            {fichiers.map((fichier) => (
-              <div
-                key={fichier.id}
-                className="group flex items-center gap-4 border-t border-gray-100 px-4 py-3 transition-colors hover:bg-gray-50"
-              >
+          <div className="space-y-6">
+            {/* Créer un document */}
+            <div>
+              <h2 className="mb-3 text-lg font-semibold text-gray-800">Créer un document</h2>
+              {viewMode === "grid" ? (
                 <button
-                  onClick={() => router.push(`/docs/${fichier.id}`)}
-                  className="flex flex-1 items-center gap-4"
+                  onClick={handleCreate}
+                  disabled={createMutation.isPending}
+                  className="flex w-48 flex-col items-center justify-center rounded-lg border-2 border-solid border-gray-300 bg-gray-50 p-4 transition-colors hover:border-blue-400 disabled:opacity-50"
                 >
-                  <FileText
-                    size={24}
-                    className="flex-shrink-0 text-blue-400 group-hover:text-blue-500"
-                  />
-                  <span className="flex-1 truncate text-sm font-medium text-gray-800">
-                    {fichier.name}
-                  </span>
-                  <span className="flex-shrink-0 text-xs text-gray-400">
-                    {formatDate(fichier.updatedAt)}
+                  <div className="mb-3 flex h-44 items-center justify-center">
+                    <Plus size={48} className="text-gray-400" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-500">
+                    {createMutation.isPending ? "Création..." : ""}
                   </span>
                 </button>
+              ) : (
                 <button
-                  onClick={() => deleteMutation.mutate({ id: fichier.id })}
-                  className="flex-shrink-0 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                  title="Supprimer"
+                  onClick={handleCreate}
+                  disabled={createMutation.isPending}
+                  className="flex w-full items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3 transition-colors hover:bg-blue-50 disabled:opacity-50"
                 >
-                  <Trash2 size={16} />
+                  <Plus size={24} className="flex-shrink-0 text-gray-400" />
+                  <span className="flex-1 text-left text-sm font-medium text-gray-500">
+                    {createMutation.isPending ? "Création..." : ""}
+                  </span>
                 </button>
+              )}
+            </div>
+
+            {/* Mes documents */}
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-800">Mes documents</h2>
+                <div className="flex items-center gap-3">
+                  {/* Sort */}
+                  <button
+                    onClick={toggleSortOrder}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:border-blue-400"
+                    title={sortOrder === "newest" ? "Plus récents" : "Plus anciens"}
+                  >
+                    {sortOrder === "newest" ? (
+                      <ArrowDownAZ size={18} />
+                    ) : (
+                      <ArrowUpAZ size={18} />
+                    )}
+                    <span className="hidden sm:inline">
+                      {sortOrder === "newest" ? "Plus récents" : "Plus anciens"}
+                    </span>
+                  </button>
+                  {/* View toggle */}
+                  <div className="flex overflow-hidden rounded-lg border border-gray-200">
+                    <button
+                      onClick={() => setViewMode("grid")}
+                      className={`p-2 transition-colors ${
+                        viewMode === "grid"
+                          ? "bg-blue-600 text-white hover:border-blue-400"
+                          : "bg-white text-gray-600 hover:bg-gray-50 hover:border-blue-400"
+                      }`}
+                      title="Grille"
+                    >
+                      <Grid3X3 size={18} />
+                    </button>
+                    <button
+                      onClick={() => setViewMode("list")}
+                      className={`p-2 transition-colors ${
+                        viewMode === "list"
+                          ? "bg-blue-600 text-white hover:border-blue-400"
+                          : "bg-white text-gray-600 hover:bg-gray-50 hover:border-blue-400"
+                      }`}
+                      title="Liste"
+                    >
+                      <List size={18} />
+                    </button>
+                  </div>
+                </div>
               </div>
-            ))}
+
+              {viewMode === "grid" ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {fichiers.map((fichier) => (
+                    <div
+                      key={fichier.id}
+                      className="group relative flex flex-col rounded border border-gray-200 bg-white text-left transition-all hover:border-blue-400"
+                    >
+                      <button
+                        onClick={() => router.push(`/docs/${fichier.id}`)}
+                        className="flex flex-1 flex-col"
+                      >
+                        <div className="flex h-44 items-center justify-center overflow-hidden rounded-t bg-gray-50 px-3 py-2">
+                          {extractPreviewText(fichier.content) ? (
+                            <p className="line-clamp-6 self-start text-left text-xs leading-relaxed text-gray-500">
+                              {extractPreviewText(fichier.content)}
+                            </p>
+                          ) : (
+                            <FileText
+                              size={48}
+                              className="text-blue-400 group-hover:text-blue-500"
+                            />
+                          )}
+                        </div>
+                        <div className="px-4 pb-4 pt-3">
+                          {renamingId === fichier.id ? (
+                            <input
+                              autoFocus
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onBlur={() => handleRenameSubmit(fichier.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleRenameSubmit(fichier.id)
+                                if (e.key === "Escape") setRenamingId(null)
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="truncate rounded border border-blue-400 px-1 text-sm font-medium text-gray-800 outline-none"
+                            />
+                          ) : (
+                            <h3 className="truncate text-sm font-medium text-gray-800">
+                              {fichier.name}
+                            </h3>
+                          )}
+                          <p className="mt-1 text-xs text-gray-400">
+                            {formatDate(fichier.updatedAt)}
+                          </p>
+                        </div>
+                      </button>
+                      {/* 3-dot menu */}
+                      <div className="absolute bottom-2 right-2" ref={openMenuId === fichier.id ? menuRef : undefined}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setOpenMenuId(openMenuId === fichier.id ? null : fichier.id)
+                          }}
+                          className="rounded-full p-1.5 text-gray-900 transition-all hover:bg-gray-200 active:bg-blue-100"
+                        >
+                          <MoreVertical size={20} />
+                        </button>
+                        {openMenuId === fichier.id && (
+                          <div className="absolute bottom-full right-0 z-20 mb-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setRenamingId(fichier.id)
+                                setRenameValue(fichier.name)
+                                setOpenMenuId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <Pencil size={14} />
+                              Renommer
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deleteMutation.mutate({ id: fichier.id })
+                                setOpenMenuId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 size={14} />
+                              Supprimer
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                  {fichiers.map((fichier) => (
+                    <div
+                      key={fichier.id}
+                      className="group flex items-center gap-4 border-t border-gray-100 px-4 py-3 first:border-t-0 transition-colors hover:bg-gray-50"
+                    >
+                      <button
+                        onClick={() => router.push(`/docs/${fichier.id}`)}
+                        className="flex flex-1 items-center gap-4"
+                      >
+                        <FileText
+                          size={24}
+                          className="flex-shrink-0 text-blue-400 group-hover:text-blue-500"
+                        />
+                        {renamingId === fichier.id ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={() => handleRenameSubmit(fichier.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleRenameSubmit(fichier.id)
+                              if (e.key === "Escape") setRenamingId(null)
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 truncate rounded border border-blue-400 px-1 text-sm font-medium text-gray-800 outline-none"
+                          />
+                        ) : (
+                          <span className="flex-1 truncate text-sm font-medium text-gray-800">
+                            {fichier.name}
+                          </span>
+                        )}
+                        <span className="flex-shrink-0 text-xs text-gray-400">
+                          {formatDate(fichier.updatedAt)}
+                        </span>
+                      </button>
+                      <div className="relative" ref={openMenuId === fichier.id ? menuRef : undefined}>
+                        <button
+                          onClick={() => setOpenMenuId(openMenuId === fichier.id ? null : fichier.id)}
+                          className="flex-shrink-0 rounded-full p-1.5 text-gray-900 transition-all hover:bg-gray-200 active:bg-blue-100"
+                        >
+                          <MoreVertical size={20} />
+                        </button>
+                        {openMenuId === fichier.id && (
+                          <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                            <button
+                              onClick={() => {
+                                setRenamingId(fichier.id)
+                                setRenameValue(fichier.name)
+                                setOpenMenuId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <Pencil size={14} />
+                              Renommer
+                            </button>
+                            <button
+                              onClick={() => {
+                                deleteMutation.mutate({ id: fichier.id })
+                                setOpenMenuId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 size={14} />
+                              Supprimer
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -289,7 +445,7 @@ export default function DocsPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40"
+              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 transition-colors hover:border-blue-400 hover:bg-gray-50 disabled:opacity-40"
             >
               <ChevronLeft size={18} />
             </button>
@@ -300,7 +456,7 @@ export default function DocsPage() {
                 className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                   p === page
                     ? "bg-blue-600 text-white"
-                    : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                    : "border border-gray-200 bg-white text-gray-600 hover:border-blue-400 hover:bg-gray-50"
                 }`}
               >
                 {p}
@@ -309,7 +465,7 @@ export default function DocsPage() {
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-40"
+              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 transition-colors hover:border-blue-400 hover:bg-gray-50 disabled:opacity-40"
             >
               <ChevronRight size={18} />
             </button>

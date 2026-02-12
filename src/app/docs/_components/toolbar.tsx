@@ -37,7 +37,6 @@ import {
   Plus,
 } from "lucide-react"
 import { type DragEvent, useCallback, useEffect, useRef, useState } from "react"
-import { useUploadThing } from "~/utils/uploadthing"
 import { Upload } from "lucide-react"
 
 interface ToolbarProps {
@@ -286,7 +285,6 @@ function ImageDropdown({
 
 export function Toolbar({ editor }: ToolbarProps) {
   const [, forceUpdate] = useState(0)
-  const { startUpload } = useUploadThing("imageUploader")
 
   useEffect(() => {
     if (!editor) return
@@ -320,13 +318,15 @@ export function Toolbar({ editor }: ToolbarProps) {
   const addImageFromFile = useCallback(
     async (file: File) => {
       if (!editor) return
-      const res = await startUpload([file])
-      const url = res?.[0]?.ufsUrl
-      if (url) {
-        editor.chain().focus().setImage({ src: url }).run()
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      const data = (await res.json()) as { url?: string }
+      if (data.url) {
+        editor.chain().focus().setImage({ src: data.url }).run()
       }
     },
-    [editor, startUpload],
+    [editor],
   )
 
   const insertTable = useCallback(() => {
